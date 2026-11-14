@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101820">
+  <title>USDT Cloud Miner</title>
+  <style>
+    :root{--bg:#101820;--panel:#1d2b36;--panel2:#243541;--text:#f4f7f8;--muted:#aab7bf;--green:#20c997;--red:#ef6b6b;--line:#40515d;--yellow:#f5c451}
+    *{box-sizing:border-box}
+    body{margin:0;padding:18px;background:var(--bg);color:var(--text);font-family:Arial,sans-serif}
+    .container{max-width:520px;margin:auto}
+    h1{text-align:center;color:var(--green);margin:12px 0 4px;font-size:26px}
+    h2,h3{margin:0 0 12px}
+    .subtitle{text-align:center;color:var(--muted);margin:0 0 18px}
+    .card{background:var(--panel);padding:18px;border-radius:14px;margin:14px 0;border:1px solid rgba(255,255,255,.04)}
+    .center{text-align:center}
+    .balance{font-size:clamp(26px,7vw,34px);color:var(--green);font-weight:bold;overflow-wrap:anywhere}
+    .small{font-size:12px;color:var(--muted);line-height:1.55}
+    .muted{color:var(--muted)}
+    .green{color:var(--green)} .red{color:var(--red)} .yellow{color:var(--yellow)}
+    input{width:100%;padding:13px;margin:7px 0;background:#101820;color:white;border:1px solid #52616b;border-radius:8px;font-size:15px}
+    button{width:100%;padding:13px;margin-top:9px;border:0;border-radius:8px;background:var(--green);color:#10251f;font-weight:bold;font-size:15px;cursor:pointer}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    button.secondary{background:#52616b;color:white}
+    button.stop{background:var(--red);color:white}
+    button.warn{background:var(--yellow);color:#2b2410}
+    .row{display:flex;gap:9px}.row button{flex:1}
+    .item{padding:10px 0;border-bottom:1px solid var(--line);font-size:13px;overflow-wrap:anywhere}
+    .item:last-child{border-bottom:0}
+    .hidden{display:none!important}
+    .status{padding:10px;border-radius:8px;background:#14232c;margin:10px 0;font-size:13px;line-height:1.5}
+    .pill{display:inline-block;padding:4px 8px;border-radius:20px;background:#29443f;color:var(--green);font-size:11px}
+    .notice{border-left:3px solid var(--yellow);padding:9px 11px;background:#302c20;border-radius:5px;color:#f7e4aa;font-size:12px;line-height:1.55}
+    .tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .tabs button{margin:0}
+    .timer{font-size:30px;font-weight:bold;letter-spacing:2px;margin:8px}
+    label{font-size:13px;color:var(--muted)}
+    a{color:var(--green)}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>USDT CLOUD MINER</h1>
+  <p class="subtitle">Personal Rewards Dashboard</p>
+
+  <div id="appNotice" class="notice">
+    MODE DEMO: aplikasi ini tidak menambang USDT dan tidak mengirim transaksi blockchain.
+    Saldo dan reward adalah catatan aplikasi, bukan bukti kepemilikan USDT.
+  </div>
+
+  <section id="authCard" class="card">
+    <h2>Akun pengguna</h2>
+    <div class="tabs">
+      <button id="showLogin" type="button">Login</button>
+      <button id="showRegister" type="button" class="secondary">Daftar</button>
+    </div>
+    <form id="loginForm">
+      <label for="loginEmail">Email</label>
+      <input id="loginEmail" type="email" autocomplete="email" placeholder="nama@email.com" required>
+      <label for="loginPassword">Password</label>
+      <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password" required minlength="6">
+      <button type="submit" id="loginButton">Login</button>
+      <button type="button" id="resetPassword" class="secondary">Kirim link reset password</button>
+    </form>
+    <form id="registerForm" class="hidden">
+      <label for="registerEmail">Email</label>
+      <input id="registerEmail" type="email" autocomplete="email" placeholder="nama@email.com" required>
+      <label for="registerPassword">Password (minimal 6 karakter)</label>
+      <input id="registerPassword" type="password" autocomplete="new-password" placeholder="Buat password" required minlength="6">
+      <button type="submit" id="registerButton">Buat akun</button>
+    </form>
+    <p id="authStatus" class="status" role="status">Hubungkan Firebase untuk mulai.</p>
+  </section>
+
+  <main id="dashboard" class="hidden">
+    <section class="card">
+      <div class="row" style="align-items:center">
+        <div style="flex:1;min-width:0">
+          <div class="small">Login sebagai</div>
+          <strong id="userEmail">-</strong>
+        </div>
+        <button id="logoutButton" class="secondary" style="width:auto;margin:0;padding:10px 14px">Keluar</button>
+      </div>
+    </section>
+
+    <section class="card center">
+      <p class="muted">Saldo tercatat</p>
+      <div class="balance" id="balance">0.000000 USDT</div>
+      <p class="small">Saldo demo dari catatan transaksi akun ini. Bukan saldo on-chain.</p>
+      <span class="pill" id="connectionState">Menghubungkan...</span>
+    </section>
+
+    <section class="card center">
+      <h3>Mining Session Demo</h3>
+      <p id="miningStatus" class="green">Status: Berhenti</p>
+      <div id="timer" class="timer">00:00:00</div>
+      <div class="row">
+        <button id="startButton">START</button>
+        <button id="stopButton" class="stop" disabled>STOP</button>
+      </div>
+      <p class="small">Timer hanya mencatat durasi sesi. Timer tidak menghasilkan koin atau reward otomatis.</p>
+    </section>
+
+    <section class="card">
+      <h3>Catat reward demo</h3>
+      <input id="rewardAmount" type="number" min="0.000001" step="0.000001" placeholder="Jumlah USDT (contoh 0.10)">
+      <input id="rewardNote" maxlength="100" placeholder="Catatan sumber reward (opsional)">
+      <button id="addRewardButton">Catat reward</button>
+      <p class="small">Hanya untuk menguji pencatatan. Jangan masukkan reward yang belum benar-benar diterima. Pada versi produksi, pencatatan reward wajib dilakukan server/admin, bukan browser pengguna.</p>
+    </section>
+
+    <section class="card">
+      <h3>Ajukan penarikan demo</h3>
+      <input id="withdrawAmount" type="number" min="0.000001" step="0.000001" placeholder="Jumlah USDT">
+      <button id="withdrawButton" class="stop">Buat permintaan penarikan</button>
+      <p class="small">Permintaan hanya disimpan sebagai catatan berstatus menunggu. Tidak mengirim USDT.</p>
+    </section>
+
+    <section class="card">
+      <h3>Wallet USDT ERC20</h3>
+      <input id="walletAddress" inputmode="text" autocomplete="off" placeholder="Alamat wallet 0x...">
+      <button id="saveWalletButton">Simpan wallet</button>
+      <p id="walletStatus" class="small">Jangan pernah memasukkan private key atau seed phrase.</p>
+    </section>
+
+    <section class="card">
+      <h3>Riwayat transaksi</h3>
+      <div id="transactions" class="small">Memuat transaksi...</div>
+    </section>
+
+    <section class="card">
+      <h3>Riwayat sesi</h3>
+      <div id="sessions" class="small">Memuat sesi...</div>
+    </section>
+
+    <section class="card">
+      <h3>Permintaan penarikan</h3>
+      <div id="withdrawals" class="small">Memuat permintaan...</div>
+    </section>
+  </main>
+
+  <p class="small center">USDT adalah token yang berjalan di jaringan blockchain; bukan aset yang ditambang langsung. Jangan pernah membagikan private key, seed phrase, atau kode verifikasi.</p>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+  import {
+    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+    sendPasswordResetEmail, onAuthStateChanged, signOut
+  } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+  import {
+    getFirestore, doc, setDoc, getDoc, addDoc, collection,
+    query, orderBy, limit, onSnapshot, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+
+  // Konfigurasi Firebase dari project milik Anda.
+  const firebaseConfig = {
+    apiKey: "AIzaSyAogK7Rq-yH5VSikbEpL05PA-btmuF3SX8",
+    authDomain: "usdt-cloud-miner-65de4.firebaseapp.com",
+    projectId: "usdt-cloud-miner-65de4",
+    storageBucket: "usdt-cloud-miner-65de4.firebasestorage.app",
+    messagingSenderId: "84503922726",
+    appId: "1:84503922726:web:4d06e761e41659cbeb7ee7"
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  let currentUser = null;
+  let stopListeners = [];
+  let sessionStart = null;
+  let timerHandle = null;
+
+  const money = (n) => `${Number(n || 0).toFixed(6)} USDT`;
+  const showStatus = (message, isError=false) => {
+    $("authStatus").textContent = message;
+    $("authStatus").className = "status " + (isError ? "red" : "green");
+  };
+  const setConnection = (message, good=true) => {
+    $("connectionState").textContent = message;
+    $("connectionState").style.color = good ? "var(--green)" : "var(--yellow)";
+  };
+  const userDoc = () => doc(db, "users", currentUser.uid);
+  const userCollection = (name) => collection(db, "users", currentUser.uid, name);
+
+  function showLoginMode(register=false) {
+    $("loginForm").classList.toggle("hidden", register);
+    $("registerForm").classList.toggle("hidden", !register);
+    $("showLogin").className = register ? "secondary" : "";
+    $("showRegister").className = register ? "" : "secondary";
+    showStatus(register ? "Buat akun baru menggunakan email aktif." : "Masuk menggunakan akun Anda.");
+  }
+  $("showLogin").addEventListener("click", () => showLoginMode(false));
+  $("showRegister").addEventListener("click", () => showLoginMode(true));
+
+  $("loginForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const email = $("loginEmail").value.trim();
+    const password = $("loginPassword").value;
+    try {
+      $("loginButton").disabled = true;
+      await signInWithEmailAndPassword(auth, email, password);
+      showStatus("Login berhasil.");
+    } catch (error) {
+      showStatus(authError(error), true);
+    } finally {
+      $("loginButton").disabled = false;
+    }
+  });
+
+  $("registerForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const email = $("registerEmail").value.trim();
+    const password = $("registerPassword").value;
+    try {
+      $("registerButton").disabled = true;
+      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      await setDoc(doc(db, "users", credential.user.uid), {
+        email: credential.user.email,
+        walletAddress: "",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      showStatus("Akun berhasil dibuat.");
+    } catch (error) {
+      showStatus(authError(error), true);
+    } finally {
+      $("registerButton").disabled = false;
+    }
+  });
+
+  $("resetPassword").addEventListener("click", async () => {
+    const email = $("loginEmail").value.trim();
+    if (!email) return showStatus("Isi email pada kolom login terlebih dahulu.", true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      showStatus("Link reset password dikirim. Periksa inbox dan folder spam.");
+    } catch (error) {
+      showStatus(authError(error), true);
+    }
+  });
+
+  $("logoutButton").addEventListener("click", async () => {
+    try { await signOut(auth); }
+    catch (error) { alert(authError(error)); }
+  });
+
+  function authError(error) {
+    const messages = {
+      "auth/invalid-email":"Format email tidak valid.",
+      "auth/user-not-found":"Akun tidak ditemukan.",
+      "auth/wrong-password":"Password salah.",
+      "auth/invalid-credential":"Email atau password salah.",
+      "auth/email-already-in-use":"Email sudah terdaftar.",
+      "auth/weak-password":"Password terlalu lemah. Gunakan minimal 6 karakter.",
+      "auth/too-many-requests":"Terlalu banyak percobaan. Coba lagi nanti.",
+      "auth/network-request-failed":"Koneksi internet bermasalah."
+    };
+    return messages[error.code] || `Terjadi kesalahan: ${error.message}`;
+  }
+
+  function clearUserListeners() {
+    stopListeners.forEach((unsubscribe) => unsubscribe());
+    stopListeners = [];
+  }
+
+  function formatDate(value) {
+    if (!value) return "Waktu tidak tersedia";
+    const date = value.toDate ? value.toDate() : new Date(value);
+    return Number.isNaN(date.getTime()) ? "Waktu tidak tersedia" : date.toLocaleString("id-ID");
+  }
+
+  function safeText(element, text) {
+    element.textContent = text;
+  }
+
+  function addListItem(container, text, className="") {
+    const div = document.createElement("div");
+    div.className = "item " + className;
+    div.textContent = text;
+    container.appendChild(div);
+  }
+
+  function listenToUserData() {
+    clearUserListeners();
+    setConnection("Menghubungkan ke Firestore...", false);
+
+    const profileUnsub = onSnapshot(userDoc(), (snap) => {
+      const data = snap.exists() ? snap.data() : {};
+      $("walletAddress").value = data.walletAddress || "";
+      $("walletStatus").textContent = data.walletAddress ? "Wallet tersimpan pada akun." : "Belum ada wallet tersimpan.";
+      setConnection("Firebase terhubung");
+    }, (error) => {
+      setConnection("Gagal membaca profil", false);
+      console.error(error);
+    });
+    stopListeners.push(profileUnsub);
+
+    const txUnsub = onSnapshot(
+      query(userCollection("transactions"), orderBy("createdAt", "desc"), limit(100)),
+      (snap) => {
+        let balance = 0;
+        const records = [];
+        snap.forEach((item) => {
+          const data = item.data();
+          const amount = Number(data.amount || 0);
+          if (data.type === "in") balance += amount;
+          if (data.type === "out") balance -= amount;
+          records.push(data);
+        });
+        $("balance").textContent = money(balance);
+        const box = $("transactions");
+        box.replaceChildren();
+        if (!records.length) safeText(box, "Belum ada transaksi.");
+        records.forEach((t) => {
+          const incoming = t.type === "in";
+          addListItem(box,
+            `${incoming ? "Reward demo +" : "Penarikan demo -"}${money(t.amount)} | ${formatDate(t.createdAt)}${t.note ? " | " + t.note : ""}`,
+            incoming ? "green" : "red"
+          );
+        });
+      },
+      (error) => {
+        safeText($("transactions"), "Tidak dapat memuat transaksi. Periksa Firestore Rules.");
+        console.error(error);
+      }
+    );
+    stopListeners.push(txUnsub);
+
+    const sessionUnsub = onSnapshot(
+      query(userCollection("sessions"), orderBy("createdAt", "desc"), limit(50)),
+      (snap) => {
+        const box = $("sessions");
+        box.replaceChildren();
+        if (snap.empty) return safeText(box, "Belum ada sesi.");
+        let i = 0;
+        snap.forEach((item) => {
+          i++;
+          const s = item.data();
+          addListItem(box, `${i}. ${formatDate(s.createdAt)} | Durasi ${s.duration || "-"}`);
+        });
+      },
+      (error) => { safeText($("sessions"), "Tidak dapat memuat riwayat sesi."); console.error(error); }
+    );
+    stopListeners.push(sessionUnsub);
+
+    const withdrawalUnsub = onSnapshot(
+      query(userCollection("withdrawals"), orderBy("createdAt", "desc"), limit(50)),
+      (snap) => {
+        const box = $("withdrawals");
+        box.replaceChildren();
+        if (snap.empty) return safeText(box, "Belum ada permintaan penarikan.");
+        snap.forEach((item) => {
+          const w = item.data();
+          addListItem(box, `${money(w.amount)} | Status: ${w.status || "pending"} | ${formatDate(w.createdAt)}`);
+        });
+      },
+      (error) => { safeText($("withdrawals"), "Tidak dapat memuat permintaan penarikan."); console.error(error); }
+    );
+    stopListeners.push(withdrawalUnsub);
+  }
+
+  async function getRecordedBalance() {
+    const snap = await getDoc(userDoc());
+    // Saldo dihitung ulang dari transaksi pada server; transaksi dibatasi 500 untuk demo.
+    const txSnap = await import("https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js")
+      .then(({getDocs}) => getDocs(query(userCollection("transactions"), orderBy("createdAt", "desc"), limit(500))));
+    let balance = 0;
+    txSnap.forEach((item) => {
+      const t = item.data();
+      const amount = Number(t.amount || 0);
+      if (t.type === "in") balance += amount;
+      if (t.type === "out") balance -= amount;
+    });
+    return Math.max(0, balance);
+  }
+
+  $("addRewardButton").addEventListener("click", async () => {
+    const amount = Number($("rewardAmount").value);
+    if (!Number.isFinite(amount) || amount <= 0) return alert("Masukkan jumlah yang valid.");
+    const note = $("rewardNote").value.trim().slice(0,100);
+    try {
+      $("addRewardButton").disabled = true;
+      await addDoc(userCollection("transactions"), {
+        type: "in", amount, note, createdAt: serverTimestamp(), mode: "demo"
+      });
+      $("rewardAmount").value = "";
+      $("rewardNote").value = "";
+      alert("Reward demo berhasil dicatat di akun. Ini bukan transaksi blockchain.");
+    } catch (error) {
+      alert("Gagal menyimpan reward: " + error.message);
+    } finally { $("addRewardButton").disabled = false; }
+  });
+
+  $("withdrawButton").addEventListener("click", async () => {
+    const amount = Number($("withdrawAmount").value);
+    if (!Number.isFinite(amount) || amount <= 0) return alert("Masukkan jumlah penarikan yang valid.");
+    try {
+      $("withdrawButton").disabled = true;
+      const balance = await getRecordedBalance();
+      if (amount > balance) return alert("Saldo tercatat tidak mencukupi.");
+      await addDoc(userCollection("withdrawals"), {
+        amount, status: "pending_demo", createdAt: serverTimestamp(), mode: "demo"
+      });
+      $("withdrawAmount").value = "";
+      alert("Permintaan demo tersimpan dengan status menunggu. Tidak ada USDT yang dikirim.");
+    } catch (error) {
+      alert("Gagal membuat permintaan: " + error.message);
+    } finally { $("withdrawButton").disabled = false; }
+  });
+
+  $("saveWalletButton").addEventListener("click", async () => {
+    const wallet = $("walletAddress").value.trim();
+    if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+      $("walletStatus").textContent = "Format alamat Ethereum/ERC20 tidak valid.";
+      $("walletStatus").className = "small red";
+      return;
+    }
+    try {
+      await setDoc(userDoc(), {
+        email: currentUser.email,
+        walletAddress: wallet,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      $("walletStatus").textContent = "Alamat wallet berhasil disimpan pada akun.";
+      $("walletStatus").className = "small green";
+    } catch (error) {
+      $("walletStatus").textContent = "Gagal menyimpan: " + error.message;
+      $("walletStatus").className = "small red";
+    }
+  });
+
+  function displayTimer(seconds) {
+    const h = String(Math.floor(seconds / 3600)).padStart(2,"0");
+    const m = String(Math.floor((seconds % 3600) / 60)).padStart(2,"0");
+    const s = String(seconds % 60).padStart(2,"0");
+    $("timer").textContent = `${h}:${m}:${s}`;
+  }
+
+  $("startButton").addEventListener("click", () => {
+    if (timerHandle) return;
+    sessionStart = Date.now();
+    $("miningStatus").textContent = "Status: Berjalan (demo)";
+    $("startButton").disabled = true;
+    $("stopButton").disabled = false;
+    timerHandle = window.setInterval(() => {
+      displayTimer(Math.floor((Date.now() - sessionStart) / 1000));
+    }, 1000);
+  });
+
+  $("stopButton").addEventListener("click", async () => {
+    if (!timerHandle || !sessionStart) return;
+    clearInterval(timerHandle);
+    timerHandle = null;
+    const durationSeconds = Math.max(0, Math.floor((Date.now() - sessionStart) / 1000));
+    const duration = `${String(Math.floor(durationSeconds/3600)).padStart(2,"0")}:${String(Math.floor(durationSeconds%3600/60)).padStart(2,"0")}:${String(durationSeconds%60).padStart(2,"0")}`;
+    try {
+      await addDoc(userCollection("sessions"), { duration, durationSeconds, createdAt: serverTimestamp(), mode: "demo" });
+      $("miningStatus").textContent = "Status: Berhenti";
+    } catch (error) {
+      alert("Sesi berhenti, tetapi riwayat gagal disimpan: " + error.message);
+    }
+    sessionStart = null;
+    displayTimer(0);
+    $("startButton").disabled = false;
+    $("stopButton").disabled = true;
+  });
+
+  onAuthStateChanged(auth, async (user) => {
+    currentUser = user;
+    if (user) {
+      $("authCard").classList.add("hidden");
+      $("dashboard").classList.remove("hidden");
+      $("userEmail").textContent = user.email || "Email tidak tersedia";
+      try {
+        await setDoc(userDoc(), {
+          email: user.email || "",
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+        listenToUserData();
+      } catch (error) {
+        setConnection("Gagal menyiapkan akun", false);
+        alert("Gagal menyiapkan data akun: " + error.message);
+      }
+    } else {
+      clearUserListeners();
+      $("dashboard").classList.add("hidden");
+      $("authCard").classList.remove("hidden");
+      setConnection("Belum login", false);
+      if (timerHandle) clearInterval(timerHandle);
+      timerHandle = null;
+      sessionStart = null;
+      displayTimer(0);
+    }
+  });
+</script>
+</body>
+</html>
