@@ -37,6 +37,11 @@
     .timer{font-size:30px;font-weight:bold;letter-spacing:2px;margin:8px}
     label{font-size:13px;color:var(--muted)}
     a{color:var(--green)}
+    .currency-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:12px}
+    .currency-tile{background:#14232c;border:1px solid var(--line);border-radius:10px;padding:11px;text-align:left;min-width:0}
+    .currency-tile strong{display:block;color:var(--green);font-size:15px;overflow-wrap:anywhere}
+    .currency-tile span{font-size:11px;color:var(--muted)}
+    select{width:100%;padding:12px;margin:7px 0;background:#101820;color:white;border:1px solid #52616b;border-radius:8px;font-size:15px}
   </style>
 </head>
 <body>
@@ -89,6 +94,27 @@
       <div class="balance" id="balance">0.000000 USDT</div>
       <p class="small">Saldo demo dari catatan transaksi akun ini. Bukan saldo on-chain.</p>
       <span class="pill" id="connectionState">Menghubungkan...</span>
+    </section>
+
+    <section class="card">
+      <h3>Multi-currency wallet</h3>
+      <p class="small">Saldo sumber tetap USDT. USD, IDR, BTC, LTC, ETH, dan SOL di bawah adalah nilai konversi perkiraan, bukan saldo aset terpisah.</p>
+      <label for="displayCurrency">Tampilkan saldo utama dalam</label>
+      <select id="displayCurrency">
+        <option value="USDT">USDT</option><option value="USD">USD</option><option value="IDR">Rupiah (IDR)</option>
+        <option value="BTC">Bitcoin (BTC)</option><option value="LTC">Litecoin (LTC)</option><option value="ETH">Ethereum (ETH)</option><option value="SOL">Solana (SOL)</option>
+      </select>
+      <div class="balance" id="selectedBalance">0.000000 USDT</div>
+      <div class="currency-grid" id="currencyGrid">
+        <div class="currency-tile"><span>USDT</span><strong id="valueUSDT">0.000000</strong></div>
+        <div class="currency-tile"><span>USD</span><strong id="valueUSD">-</strong></div>
+        <div class="currency-tile"><span>IDR</span><strong id="valueIDR">-</strong></div>
+        <div class="currency-tile"><span>BTC</span><strong id="valueBTC">-</strong></div>
+        <div class="currency-tile"><span>LTC</span><strong id="valueLTC">-</strong></div>
+        <div class="currency-tile"><span>ETH</span><strong id="valueETH">-</strong></div>
+        <div class="currency-tile"><span>SOL</span><strong id="valueSOL">-</strong></div>
+      </div>
+      <p class="small" id="rateStatus">Memuat kurs konversi...</p>
     </section>
 
     <section class="card center">
@@ -173,8 +199,46 @@
   let stopListeners = [];
   let sessionStart = null;
   let timerHandle = null;
+  let recordedUsdtBalance = 0;
+  let displayCurrency = "USDT";
+  let fxRates = { USD: 1, IDR: null, BTC: null, LTC: null, ETH: null, SOL: null };
 
   const money = (n) => `${Number(n || 0).toFixed(6)} USDT`;
+  const currencyFormat = (n, currency) => {
+    if (!Number.isFinite(n)) return "-";
+    const digits = currency === "IDR" ? 0 : (currency === "BTC" ? 8 : 6);
+    return new Intl.NumberFormat("id-ID", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n) + " " + currency;
+  };
+  function renderWalletValues() {
+    const amount = recordedUsdtBalance;
+    const values = { USDT: amount, USD: amount, IDR: fxRates.IDR ? amount * fxRates.IDR : null,
+      BTC: fxRates.BTC ? amount / fxRates.BTC : null, LTC: fxRates.LTC ? amount / fxRates.LTC : null,
+      ETH: fxRates.ETH ? amount / fxRates.ETH : null, SOL: fxRates.SOL ? amount / fxRates.SOL : null };
+    Object.entries(values).forEach(([currency, value]) => {
+      const node = $("value" + currency);
+      if (node) node.textContent = value === null ? "Kurs belum tersedia" : currencyFormat(value, currency);
+    });
+    const selected = values[displayCurrency];
+    $("selectedBalance").textContent = selected === null ? "Kurs belum tersedia" : currencyFormat(selected, displayCurrency);
+    $("balance").textContent = money(amount);
+  }
+  async function refreshExchangeRates() {
+    const status = $("rateStatus");
+    status.textContent = "Memperbarui kurs...";
+    const outcomes = await Promise.allSettled([
+      fetch("https://open.er-api.com/v6/latest/USD").then(r => { if (!r.ok) throw new Error("Kurs IDR gagal"); return r.json(); }),
+      fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,litecoin,ethereum,solana&vs_currencies=usd").then(r => { if (!r.ok) throw new Error("Kurs crypto gagal"); return r.json(); })
+    ]);
+    if (outcomes[0].status === "fulfilled") fxRates.IDR = Number(outcomes[0].value?.rates?.IDR) || null;
+    if (outcomes[1].status === "fulfilled") {
+      const data = outcomes[1].value;
+      fxRates.BTC = Number(data?.bitcoin?.usd) || null; fxRates.LTC = Number(data?.litecoin?.usd) || null;
+      fxRates.ETH = Number(data?.ethereum?.usd) || null; fxRates.SOL = Number(data?.solana?.usd) || null;
+    }
+    renderWalletValues();
+    const success = outcomes.some(x => x.status === "fulfilled");
+    status.textContent = success ? "Kurs indikatif diperbarui dari penyedia eksternal. USDT diasumsikan ≈ 1 USD; nilai dapat berubah dan bukan harga transaksi." : "Kurs tidak dapat dimuat. Periksa koneksi internet; saldo USDT tetap tersedia.";
+  }
   const showStatus = (message, isError=false) => {
     $("authStatus").textContent = message;
     $("authStatus").className = "status " + (isError ? "red" : "green");
@@ -195,6 +259,14 @@
   }
   $("showLogin").addEventListener("click", () => showLoginMode(false));
   $("showRegister").addEventListener("click", () => showLoginMode(true));
+  $("displayCurrency").addEventListener("change", async (event) => {
+    displayCurrency = event.target.value;
+    renderWalletValues();
+    if (currentUser) {
+      try { await setDoc(userDoc(), { displayCurrency, updatedAt: serverTimestamp() }, { merge: true }); }
+      catch (error) { console.error("Preferensi mata uang gagal disimpan", error); }
+    }
+  });
 
   $("loginForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -292,6 +364,9 @@
       const data = snap.exists() ? snap.data() : {};
       $("walletAddress").value = data.walletAddress || "";
       $("walletStatus").textContent = data.walletAddress ? "Wallet tersimpan pada akun." : "Belum ada wallet tersimpan.";
+      displayCurrency = ["USDT","USD","IDR","BTC","LTC","ETH","SOL"].includes(data.displayCurrency) ? data.displayCurrency : "USDT";
+      $("displayCurrency").value = displayCurrency;
+      renderWalletValues();
       setConnection("Firebase terhubung");
     }, (error) => {
       setConnection("Gagal membaca profil", false);
@@ -300,7 +375,7 @@
     stopListeners.push(profileUnsub);
 
     const txUnsub = onSnapshot(
-      query(userCollection("transactions"), orderBy("createdAt", "desc"), limit(100)),
+      query(userCollection("transactions"), orderBy("createdAt", "desc")),
       (snap) => {
         let balance = 0;
         const records = [];
@@ -311,7 +386,8 @@
           if (data.type === "out") balance -= amount;
           records.push(data);
         });
-        $("balance").textContent = money(balance);
+        recordedUsdtBalance = balance;
+        renderWalletValues();
         const box = $("transactions");
         box.replaceChildren();
         if (!records.length) safeText(box, "Belum ada transaksi.");
@@ -367,7 +443,7 @@
     const snap = await getDoc(userDoc());
     // Saldo dihitung ulang dari transaksi pada server; transaksi dibatasi 500 untuk demo.
     const txSnap = await import("https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js")
-      .then(({getDocs}) => getDocs(query(userCollection("transactions"), orderBy("createdAt", "desc"), limit(500))));
+      .then(({getDocs}) => getDocs(query(userCollection("transactions"), orderBy("createdAt", "desc"))));
     let balance = 0;
     txSnap.forEach((item) => {
       const t = item.data();
@@ -481,6 +557,7 @@
           updatedAt: serverTimestamp()
         }, { merge: true });
         listenToUserData();
+        refreshExchangeRates();
       } catch (error) {
         setConnection("Gagal menyiapkan akun", false);
         alert("Gagal menyiapkan data akun: " + error.message);
@@ -498,4 +575,4 @@
   });
 </script>
 </body>
-  </html>
+</html>
